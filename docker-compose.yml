@@ -1,0 +1,54 @@
+volumes:
+  nominatim-data:
+
+services:
+  nominatim:
+    image: mediagis/nominatim:4.5
+    container_name: geobarber-nominatim
+    restart: unless-stopped
+    ports:
+      - "8088:8080"
+    environment:
+      # Spain-only extract keeps import time/disk sane. Swap for a smaller
+      # regional extract if Geofabrik publishes one for Madrid specifically.
+      PBF_URL: https://download.geofabrik.de/europe/spain-latest.osm.pbf
+      REPLICATION_URL: https://download.geofabrik.de/europe/spain-updates/
+      IMPORT_WIKIPEDIA: "false"
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:-changeme}
+    volumes:
+      - ./nominatim-data:/var/lib/postgresql/14/main
+    shm_size: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/status.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10m # first-run import can take 30min-2hr; healthcheck must not flap during that
+
+  # One-shot: builds the OTP transit graph from ./infra/otp/data (GTFS + OSM
+  # pbf you place there yourself — see infra/otp/README.md). Re-run whenever
+  # GTFS is refreshed (§2 — the graph must be rebuilt on a recurring schedule,
+  # not left stale indefinitely).
+  otp-build:
+    image: docker.io/opentripplanner/opentripplanner:2.7.0
+    container_name: geobarber-otp-build
+    profiles: ["build"]
+    volumes:
+      - ./infra/otp/data:/var/opentripplanner
+    command: ["--build", "--save", "/var/opentripplanner"]
+
+  otp:
+    image: docker.io/opentripplanner/opentripplanner:2.7.0
+    container_name: geobarber-otp
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./infra/otp/data:/var/opentripplanner
+    command: ["--load", "/var/opentripplanner"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/otp/actuators/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 2m

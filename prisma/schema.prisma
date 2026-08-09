@@ -1,0 +1,311 @@
+// Prisma schema — geobarber
+// See geobarber-spec.md sections 3-22 for entity definitions.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum AppointmentStatus {
+  REQUESTED
+  PROPOSED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+  DECLINED
+  EXPIRED
+}
+
+enum AppointmentEventType {
+  REQUESTED
+  CONFIRMED
+  PROPOSED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_DECLINED
+  DECLINED
+  EXPIRED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum WorkingHoursExceptionType {
+  DAY_OFF
+  SPECIAL_HOURS
+}
+
+// ---------------------------------------------------------------------------
+// Customers (§4)
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  clerkUserId String   @unique
+  firstName   String
+  lastName    String
+  email       String   @unique
+  phone       String?
+  // Not in the spec's entity list verbatim, but required to satisfy §2's
+  // admin bootstrapping/promotion flow (ADMIN_CLERK_USER_IDS is a fallback,
+  // DB-backed role is the primary mechanism once an admin exists).
+  role        Role     @default(CUSTOMER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  addresses    Address[]
+  appointments Appointment[]
+}
+
+// ---------------------------------------------------------------------------
+// Providers (§5)
+// ---------------------------------------------------------------------------
+
+model Provider {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  homeAddress   String
+  homeLatitude  Float
+  homeLongitude Float
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workingHours           WorkingHours[]
+  workingHoursExceptions WorkingHoursException[]
+  appointments           Appointment[]
+}
+
+// ---------------------------------------------------------------------------
+// Services (§6)
+// ---------------------------------------------------------------------------
+
+model Service {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  description     String?
+  durationMinutes Int
+  priceCents      Int
+  currency        String   @default("EUR")
+  active          Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Addresses (§8)
+// ---------------------------------------------------------------------------
+
+model Address {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  customerId       String   @db.ObjectId
+  label            String?
+  originalAddress  String
+  formattedAddress String
+  latitude         Float
+  longitude        Float
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+}
+
+// ---------------------------------------------------------------------------
+// Service zone (§9)
+// ---------------------------------------------------------------------------
+
+model ServiceZone {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  // GeoJSON Polygon, e.g. { "type": "Polygon", "coordinates": [[[lng,lat],...]] }
+  geometry  Json
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Working hours (§12) — recurring weekly schedule, multiple intervals/day
+// ---------------------------------------------------------------------------
+
+model WorkingHours {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  providerId  String   @db.ObjectId
+  // 0 = Sunday ... 6 = Saturday
+  dayOfWeek   Int
+  // Minutes since midnight, in the provider's configured timezone.
+  startMinute Int
+  endMinute   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@index([providerId, dayOfWeek])
+}
+
+// ---------------------------------------------------------------------------
+// Working hours exceptions (§12) — holidays, days off, special-day hours
+// ---------------------------------------------------------------------------
+
+model WorkingHoursException {
+  id          String                    @id @default(auto()) @map("_id") @db.ObjectId
+  providerId  String                    @db.ObjectId
+  // Calendar date this exception applies to (time component ignored).
+  date        DateTime
+  type        WorkingHoursExceptionType
+  // Only set when type = SPECIAL_HOURS. A day can have multiple rows for
+  // multiple intervals on the same date, same as WorkingHours.
+  startMinute Int?
+  endMinute   Int?
+  reason      String?
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@index([providerId, date])
+}
+
+// ---------------------------------------------------------------------------
+// System settings (§49) — single row
+// ---------------------------------------------------------------------------
+
+model SystemSettings {
+  id                             String   @id @default(auto()) @map("_id") @db.ObjectId
+  timezone                       String   @default("Europe/Madrid")
+  slotIntervalMinutes            Int      @default(15)
+  nearbyThresholdMinutes         Int      @default(30)
+  maxRouteAlternatives           Int      @default(2)
+  pendingRequestExpirationHours  Int      @default(12)
+  cancellationCutoffHours        Int      @default(24)
+  // Reminder default is 08:00 Europe/Madrid (§41); admins may instead
+  // configure a fixed lead time in hours before the appointment.
+  reminderHourLocal              Int      @default(8)
+  reminderHoursBeforeAppointment Int?
+  gtfsStalenessThresholdDays     Int      @default(30)
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Route cache (§22)
+// ---------------------------------------------------------------------------
+
+model RouteCache {
+  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
+  originLatitude       Float
+  originLongitude      Float
+  destinationLatitude  Float
+  destinationLongitude Float
+  // Departure time bucketed into 5-15 minute intervals (see §22).
+  departureTimeBucket  DateTime
+  // Serialized TransitRoute[]
+  routes               Json
+  expiresAt            DateTime
+  createdAt            DateTime @default(now())
+
+  @@index([originLatitude, originLongitude, destinationLatitude, destinationLongitude, departureTimeBucket])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Appointments (§15)
+// ---------------------------------------------------------------------------
+
+model Appointment {
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  customerId String @db.ObjectId
+  providerId String @db.ObjectId
+
+  // Snapshotted at booking time (§8) — stable even if the saved Address changes later.
+  address   String
+  latitude  Float
+  longitude Float
+
+  // Preserves the customer's original request when an alternative is proposed (§15).
+  requestedStartAt DateTime
+  requestedEndAt   DateTime
+  startAt          DateTime
+  endAt            DateTime
+
+  status AppointmentStatus @default(REQUESTED)
+
+  totalPriceCents Int
+  currency        String  @default("EUR")
+  notes           String?
+
+  reminderSentAt DateTime?
+
+  // Set when admin proposes an alternative slot (§33).
+  proposedAt        DateTime?
+  proposedByAdminId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer             @relation(fields: [customerId], references: [id])
+  provider Provider             @relation(fields: [providerId], references: [id])
+  services AppointmentService[]
+  events   AppointmentEvent[]
+
+  @@index([customerId])
+  @@index([providerId, startAt])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Appointment services (§16) — snapshotted at booking time
+// ---------------------------------------------------------------------------
+
+model AppointmentService {
+  id              String @id @default(auto()) @map("_id") @db.ObjectId
+  appointmentId   String @db.ObjectId
+  serviceId       String @db.ObjectId
+  serviceName     String
+  quantity        Int
+  durationMinutes Int
+  unitPriceCents  Int
+  totalPriceCents Int
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@index([appointmentId])
+}
+
+// ---------------------------------------------------------------------------
+// Appointment history (§17)
+// ---------------------------------------------------------------------------
+
+model AppointmentEvent {
+  id               String               @id @default(auto()) @map("_id") @db.ObjectId
+  appointmentId    String               @db.ObjectId
+  type             AppointmentEventType
+  // Clerk user id of the customer/admin who triggered the event, or null for system-triggered events (e.g. expiration).
+  actorId          String?
+  metadata         Json?
+  // Cancellation/reschedule occurring after the configured cutoff (§61) — flagged for admin follow-up, not enforced automatically.
+  lateCancellation Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@index([appointmentId, createdAt])
+}

@@ -1,0 +1,272 @@
+/* iOS-inspired overrides for react-big-calendar's default (rather dated) look.
+   Loaded after react-big-calendar/lib/css/react-big-calendar.css so these win.
+
+   The calendar is an intentionally self-contained opaque card (explicit
+   background on every structural pane below) rather than inheriting the
+   page background — react-big-calendar's month/week/day/time-gutter panes
+   don't all set their own background, and this app's dark mode is a
+   `prefers-color-scheme` media query (no `.dark` class to hook), so without
+   this the calendar's dark default text ends up on the page's near-black
+   dark-mode background and disappears. */
+
+.rbc-calendar {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+  color: #1c1c1e;
+  background: #ffffff;
+  border-radius: 16px;
+}
+
+/* Toolbar: pill buttons, no harsh borders */
+.rbc-toolbar {
+  margin-bottom: 16px;
+  gap: 8px;
+}
+
+.rbc-toolbar .rbc-toolbar-label {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1c1c1e;
+}
+
+.rbc-toolbar button {
+  color: #007aff;
+  border: none;
+  background: rgba(120, 120, 128, 0.12);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+}
+
+.rbc-toolbar button:hover {
+  background: rgba(120, 120, 128, 0.2);
+  color: #007aff;
+}
+
+.rbc-toolbar button.rbc-active,
+.rbc-toolbar button.rbc-active:hover {
+  background: #007aff;
+  color: #fff;
+  box-shadow: none;
+}
+
+/* Every structural pane gets an explicit background/text color — see note above. */
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view,
+.rbc-time-header,
+.rbc-time-header-content,
+.rbc-time-content,
+.rbc-time-gutter,
+.rbc-day-slot,
+.rbc-day-bg,
+.rbc-allday-cell,
+.rbc-header,
+.rbc-agenda-view table.rbc-agenda-table {
+  background: #ffffff;
+  color: #1c1c1e;
+}
+
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view {
+  border: 1px solid rgba(60, 60, 67, 0.1);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.rbc-month-row + .rbc-month-row,
+.rbc-day-bg + .rbc-day-bg,
+.rbc-header + .rbc-header,
+.rbc-time-content,
+.rbc-time-content > * + *,
+.rbc-day-slot .rbc-time-slot,
+.rbc-timeslot-group,
+.rbc-time-header-content,
+.rbc-time-header.rbc-overflowing {
+  border-color: rgba(60, 60, 67, 0.1);
+}
+
+.rbc-header {
+  padding: 10px 4px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: rgba(60, 60, 67, 0.65);
+  border-bottom: 1px solid rgba(60, 60, 67, 0.08);
+}
+
+/* Time-of-day labels in the left gutter (week/day views) */
+.rbc-label {
+  color: rgba(60, 60, 67, 0.6);
+  font-size: 12px;
+}
+
+/* Today: soft blue tint, not a harsh border */
+.rbc-today {
+  background-color: rgba(0, 122, 255, 0.06);
+}
+
+.rbc-off-range-bg {
+  background-color: rgba(120, 120, 128, 0.04);
+}
+
+.rbc-off-range {
+  color: rgba(60, 60, 67, 0.35);
+}
+
+/* Events: rounded, soft shadow, always white text regardless of theme since
+   background is set per-status via eventPropGetter (see ScheduleView.tsx). */
+.rbc-event {
+  border: none;
+  border-radius: 8px;
+  padding: 3px 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.rbc-event:focus {
+  outline: 2px solid rgba(0, 122, 255, 0.5);
+  outline-offset: 1px;
+}
+
+.rbc-event-label {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.rbc-selected {
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.rbc-current-time-indicator {
+  background-color: #ff3b30;
+  height: 2px;
+}
+
+/* Agenda view table */
+.rbc-agenda-view table.rbc-agenda-table {
+  border: none;
+}
+
+.rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  border-bottom: 1px solid rgba(60, 60, 67, 0.08);
+  padding: 8px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: rgba(60, 60, 67, 0.6);
+}
+
+.rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+  border-color: rgba(60, 60, 67, 0.06);
+  padding: 8px;
+  color: #1c1c1e;
+}
+
+/* Dark mode — this app has no `.dark` class, it follows the OS/browser
+   preference directly, so that's what this hooks too. iOS system dark
+   palette: #1c1c1e surface, #f2f2f7 label, systemBlue dark #0a84ff. */
+@media (prefers-color-scheme: dark) {
+  .rbc-calendar {
+    color: #f2f2f7;
+    background: #1c1c1e;
+  }
+
+  .rbc-toolbar .rbc-toolbar-label {
+    color: #f2f2f7;
+  }
+
+  .rbc-toolbar button {
+    color: #0a84ff;
+    background: rgba(120, 120, 128, 0.24);
+  }
+
+  .rbc-toolbar button:hover {
+    background: rgba(120, 120, 128, 0.32);
+    color: #0a84ff;
+  }
+
+  .rbc-toolbar button.rbc-active,
+  .rbc-toolbar button.rbc-active:hover {
+    background: #0a84ff;
+    color: #fff;
+  }
+
+  .rbc-month-view,
+  .rbc-time-view,
+  .rbc-agenda-view,
+  .rbc-time-header,
+  .rbc-time-header-content,
+  .rbc-time-content,
+  .rbc-time-gutter,
+  .rbc-day-slot,
+  .rbc-day-bg,
+  .rbc-allday-cell,
+  .rbc-header,
+  .rbc-agenda-view table.rbc-agenda-table {
+    background: #1c1c1e;
+    color: #f2f2f7;
+  }
+
+  .rbc-month-view,
+  .rbc-time-view,
+  .rbc-agenda-view {
+    border-color: rgba(84, 84, 88, 0.4);
+  }
+
+  .rbc-month-row + .rbc-month-row,
+  .rbc-day-bg + .rbc-day-bg,
+  .rbc-header + .rbc-header,
+  .rbc-time-content,
+  .rbc-time-content > * + *,
+  .rbc-day-slot .rbc-time-slot,
+  .rbc-timeslot-group,
+  .rbc-time-header-content,
+  .rbc-time-header.rbc-overflowing {
+    border-color: rgba(84, 84, 88, 0.4);
+  }
+
+  .rbc-header {
+    color: rgba(235, 235, 245, 0.6);
+    border-bottom-color: rgba(84, 84, 88, 0.4);
+  }
+
+  .rbc-label {
+    color: rgba(235, 235, 245, 0.6);
+  }
+
+  .rbc-today {
+    background-color: rgba(10, 132, 255, 0.15);
+  }
+
+  .rbc-off-range-bg {
+    background-color: rgba(120, 120, 128, 0.12);
+  }
+
+  .rbc-off-range {
+    color: rgba(235, 235, 245, 0.35);
+  }
+
+  .rbc-event {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+
+  .rbc-selected {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+  }
+
+  .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+    color: rgba(235, 235, 245, 0.6);
+    border-bottom-color: rgba(84, 84, 88, 0.4);
+  }
+
+  .rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+    border-color: rgba(84, 84, 88, 0.25);
+    color: #f2f2f7;
+  }
+}
